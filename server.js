@@ -10,36 +10,25 @@ const LOG_SERVER_URL = 'https://app-tracking.pockethost.io/api/collections/drone
 // GET /configs/:id
 app.get('/configs/:id', async (req, res) => {
   try {
-      const { id } = req.params;
-      const response = await axios.get(`${DRONE_CONFIG_URL}?drone_id=${id}`);
-      let data = response.data.data; // เข้าถึงส่วน data ที่เป็น array
+    const { id } = req.params; // รับ drone_id จาก URL
+    const response = await axios.get(`${CONFIG_SERVER_URL}?drone_id=${id}`); // เรียก API server1
+    let config = response.data;
 
-      // หาโดรนที่มี drone_id ตรงกับ id ที่ต้องการ
-      const config = data.find(drone => drone.drone_id == id);
+    // ถ้า max_speed ไม่มี ให้ตั้งค่าเป็น 100
+    if (!config.max_speed) {
+      config.max_speed = 100;
+    }
 
-      if (!config) {
-          return res.status(404).send('Drone not found');
-      }
+    // ถ้า max_speed มากกว่า 110 ให้จำกัดที่ 110
+    if (config.max_speed > 110) {
+      config.max_speed = 110;
+    }
 
-      // ตั้งค่า max_speed ตามเงื่อนไข
-      const maxSpeed = config.max_speed ? Math.min(config.max_speed, 110) : 100;
-
-      const result = {
-        drone_id: config.drone_id,
-        drone_name: config.drone_name,
-        light: config.light,
-        country: config.country,
-        max_speed: maxSpeed
-      };
-      
-      console.log(result)
-      res.json(result);
+    res.json(config); // ส่ง response กลับไป
   } catch (error) {
-      console.error('Error details:', error); // เพิ่มการพิมพ์รายละเอียดของข้อผิดพลาด
-      res.status(500).send('Error fetching drone config');
+    res.status(500).json({ message: 'เกิดข้อผิดพลาดในการเรียกข้อมูล config', error: error.message });
   }
 });
-
 // GET 
 app.get('/status/:id', (req, res) => {
   const { id } = req.params;
