@@ -1,78 +1,123 @@
-const express = require('express');
-const axios = require('axios');
+const axios = require("axios");
+const express = require("express");
+const bodyParser = require("body-parser");
 const app = express();
-app.use(express.json()); // ทำให้ API สามารถรับข้อมูลแบบ JSON ได้
 
-// URLs ของ servers ภายนอก
-const CONFIG_SERVER_URL = 'https://script.google.com/macros/s/AKfycbzwclqJRodyVjzYyY-NTQDb9cWG6Hoc5vGAABVtr5-jPA_ET_2IasrAJK4aeo5XoONiaA/exec';
-const LOG_SERVER_URL = 'https://app-tracking.pockethost.io/api/collections/drone_logs/records';
+const url =
+  "https://script.googleusercontent.com/macros/echo?user_content_key=LNVFjOFyt7uVGdh9GjFmTtUjpJGAGcPqxfQ7ZlS0z0YXzN-q4VxyckLPNEpmfsakqX67xjIvt3R_upKHZrcA66yl7C3zdg7sm5_BxDlH2jW0nuo2oDemN9CCS2h10ox_1xSncGQajx_ryfhECjZEnOQwROx_Wq-O5wsPy5w5JUsdPdcpj8TWgjjVAuN4sDTiMrnThHKU7n7LmNcslGllO5_ldGegmAJuXjfvqC1tFaecv-CYmXuM6Nz9Jw9Md8uu&lib=M9_yccKOaZVEQaYjEvK1gClQlFAuFWsxN";
+const url2 =
+  "https://app-tracking.pockethost.io/api/collections/drone_logs/records";
 
-// GET /configs/:id
-app.get('/configs/:id', async (req, res) => {
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.static(__dirname));  // เสิร์ฟไฟล์ HTML และ static files
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "config.html"));
+});
+app.get("/configs/:id", async (req, res) => {
+  const id = Number(req.params.id);
+  console.log("Fetching drone with ID:", id);  // ตรวจสอบ ID
   try {
-    const { id } = req.params; // รับ drone_id จาก URL
-    const response = await axios.get(`${CONFIG_SERVER_URL}?drone_id=${id}`); // เรียก API server1
-    let config = response.data;
+    const response = await axios.get(url);
+    const data = response.data.data;
 
-    // ถ้า max_speed ไม่มี ให้ตั้งค่าเป็น 100
-    if (!config.max_speed) {
-      config.max_speed = 100;
+    const drone = data.find((d) => d.drone_id === id);
+
+    if (!drone) {
+      return res.status(404).send({ error: "drone_id not found" });
     }
 
-    // ถ้า max_speed มากกว่า 110 ให้จำกัดที่ 110
-    if (config.max_speed > 110) {
-      config.max_speed = 110;
+    if (drone.max_speed == null) {
+      drone.max_speed = 100;
+    } else if (drone.max_speed > 110) {
+      drone.max_speed = 110;
     }
 
-    res.json(config); // ส่ง response กลับไป
+    res.send({
+      drone_id: drone.drone_id,
+      drone_name: drone.drone_name,
+      light: drone.light,
+      max_speed: drone.max_speed,
+      country: drone.country,
+      population: drone.population,
+    });
   } catch (error) {
-    res.status(500).json({ message: 'เกิดข้อผิดพลาดในการเรียกข้อมูล config', error: error.message });
+    console.error("Error fetching data:", error);
+    res.status(500).send("Error fetching data");
   }
 });
-// GET 
-app.get('/status/:id', (req, res) => {
-  const { id } = req.params;
-  // ตรงนี้สถานะถูกกำหนดเป็น static (แก้ไขตามที่ต้องการได้)
-  res.json({ condition: 'good' });
-});
 
-// GET /logs
-app.get('/logs', async (req, res) => {
+app.get("/logs", async (req, res) => {
   try {
-      const response = await axios.get(DRONE_LOGS_URL);
-      const logs = response.data.items;
+    const response = await axios.get(url2);
+    let data = response.data.items;
 
-      // ตรวจสอบการมีอยู่ของฟิลด์ light
-      const formattedLogs = logs.map(log => ({
-          drone_id: log.drone_id,
-          drone_name: log.drone_name,
-          created: log.created,
-          light: log.light,  // ดึงฟิลด์ light ออกมาโดยตรง
-          country: log.country,
-          celsius: log.celsius,
-          population: log.population
-      }));
-      console.log(logs)
-      res.json(formattedLogs);
+    let logs = data.map((item) => ({
+      drone_id: item.drone_id,
+      drone_name: item.drone_name,
+      created: item.created,
+      country: item.country,
+      celsius: item.celsius,
+    }));
+
+    res.send(logs);
   } catch (error) {
-      console.error(error);  // เพิ่มการแสดง error ใน console
-      res.status(500).send('Error fetching logs');
+    console.error("Error fetching data:", error);
+    res.status(500).send("Error fetching data");
   }
 });
 
-// POST /logs
-app.post('/logs', async (req, res) => {
+app.get("/status/:id", async (req, res) => {
   try {
-    const newLog = req.body; // รับข้อมูล log จาก request
-    const response = await axios.post(LOG_SERVER_URL, newLog); // ส่งข้อมูลไปยัง server2
-    res.json(response.data); // ส่งผลลัพธ์กลับไป
+    const response = await axios.get(url);
+    const data = response.data.data;
+    const id = Number(req.params.id);
+
+    const drone = data.find((d) => d.drone_id === id);
+
+    if (!drone) {
+      return res.status(404).send({ error: "drone_id not found" });
+    }
+
+    res.send({ condition: drone.condition });
   } catch (error) {
-    res.status(500).json({ message: 'เกิดข้อผิดพลาดในการบันทึก log', error: error.message });
+    console.error("Error fetching data:", error);
+    res.status(500).send("Error fetching data");
   }
 });
 
-// เริ่ม server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`API server กำลังทำงานที่ port ${PORT}`);
+app.post("/logs", async (req, res) => {
+  const { celsius, drone_id, drone_name, country } = req.body;
+
+  if (!celsius || !drone_id || !drone_name || !country) {
+    return res
+      .status(400)
+      .send(
+        "Missing required fields: celsius, drone_id, drone_name, or country"
+      );
+  }
+
+  try {
+    const { data } = await axios.post(
+      { celsius, drone_id, drone_name, country },
+      {
+        celsius: celsius,
+      },
+      {
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("Insert complete");
+    res.status(200).send("Insert complete");
+  } catch (error) {
+    console.error("Error: ", error.message);
+    res.status(500).send("Error handling the data");
+  }
+});
+
+app.listen(3000, () => {
+  console.log("Server is running on port 3000");
 });
